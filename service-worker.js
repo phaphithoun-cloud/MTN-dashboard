@@ -1,4 +1,4 @@
-// Service worker for CSE Hydropower Data dashboard.
+// Service worker for CSE Maintenance dashboard.
 //
 // Strategy: cache the app shell (the dashboard HTML + icons) so the app can
 // open even with no signal. The live Excel data (fetched from the
@@ -6,9 +6,9 @@
 // cross-origin request is left completely alone and always goes straight
 // to the network, so the numbers you see are always current.
 
-const CACHE_NAME = 'cse-hydropower-v1';
+const CACHE_NAME = 'CSE_Maintenance';
 const APP_SHELL = [
-  './hydropower_dashboard_web.html',
+  './CSE_Maintenance_Dashboard_Web.html',
   './manifest.json',
   './icon-192.png',
   './icon-512.png'
