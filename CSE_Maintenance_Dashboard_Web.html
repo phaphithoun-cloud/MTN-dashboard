@@ -206,6 +206,7 @@
     <div class="controls">
       <span id="fileState"><span class="status-dot" style="background:rgba(255,255,255,.5)"></span>ຍັງບໍ່ໄດ້ໂຫລດຂໍ້ມູນ / No file loaded</span>
       <select id="dateSelect" disabled><option>ເລືອກວັນທີ / Select date</option></select>
+      <button type="button" id="refreshBtn" class="btn" title="ດຶງຂໍ້ມູນລ່າສຸດຈາກລິ້ງທີ່ຕັ້ງໄວ້ (ຖ້າມີ) / Re-fetch latest data from configured link">⟳ ໂຫລດຄືນ</button>
       <label class="btn primary" for="fileInput">⤒ ອັບໂຫລດຟາຍ Excel</label>
       <input id="fileInput" type="file" accept=".xlsx,.xls,.xlsm">
     </div>
@@ -313,59 +314,92 @@ let ROWS = []; // long-format: one entry per plant per date
 let charts = {};
 let trendVisible = {}; // { plantCode: true/false } — which plant lines show in the trend chart
 
+// ==== ດຶງຂໍ້ມູນອັດຕະໂນມັດຈາກລິ້ງ Excel (ຖ້າຕັ້ງຄ່າໄວ້) ====
+// ໃສ່ລິ້ງ "direct-download" ຂອງໄຟລ໌ Excel ຢູ່ນີ້ (ຫຼືລິ້ງ Cloudflare Worker proxy
+// ຖ້າແຫຼ່ງຕົ້ນທາງ ເຊັ່ນ OneDrive/SharePoint ບໍ່ອະນຸຍາດ CORS ໂດຍກົງ).
+// ປ່ອຍໄວ້ເປັນ '' ຖ້າຢາກໃຊ້ການອັບໂຫລດຟາຍດ້ວຍມືເທົ່ານັ້ນ.
+const EXCEL_URL = 'https://onedrive-proxy-mtn.phaphithoun.workers.dev'; // ຕົວຢ່າງ: 'https://onedrive-proxy.YOUR-NAME.workers.dev'
+
 const fileInput = document.getElementById('fileInput');
 fileInput.addEventListener('change', handleFile);
+
+const refreshBtn = document.getElementById('refreshBtn');
+if(refreshBtn) refreshBtn.addEventListener('click', ()=> loadFromUrl(EXCEL_URL, true));
+
+// ດຶງ ແລະ ອ່ານ workbook ຈາກ ArrayBuffer ດຽວກັນ ບໍ່ວ່າຈະມາຈາກອັບໂຫລດຟາຍ ຫຼື ດຶງຈາກລິ້ງ
+function processWorkbookArrayBuffer(arrayBuffer, sourceLabel){
+  try{
+    const data = new Uint8Array(arrayBuffer);
+    const wb = XLSX.read(data, {type:'array', cellDates:true});
+    const sheetName = wb.SheetNames.find(n => n.trim().toUpperCase() === 'MTN') || wb.SheetNames[0];
+    const ws = wb.Sheets[sheetName];
+    // Wide layout: row0-2 = headers/groups, data starts row index 3 (0-based) = sheet row 4
+    const arr = XLSX.utils.sheet_to_json(ws, {header:1, range:3, defval:null});
+    ROWS = [];
+    arr.forEach(r=>{
+      if(!r || r[0] == null) return;
+      if(r[0] instanceof Date) r[0].setTime(Math.round(r[0].getTime()/60000)*60000); // round ໄປຫານາທີ່ໃກ້ສຸດ ແກ້ float error ຂອງ Excel serial date
+      const dateStr = toDateStr(r[0]);
+      const weekNum = num(r[1]);
+      PLANTS.forEach(p=>{
+        const rec = {date:dateStr, week:weekNum, code:p.code};
+        for(const k of NUM_KEYS) rec[k] = num(r[p.block + OFF[k]]);
+        rec.notes = r[p.block + OFF.notes];
+        ROWS.push(rec);
+      });
+    });
+    if(ROWS.length === 0){
+      setFileState(false, 'ບໍ່ພົບແຖວຂໍ້ມູນທີ່ຖືກຕ້ອງ / No valid rows found');
+      return;
+    }
+    setFileState(true, sourceLabel);
+    buildDateSelect();
+    // default: all plants visible in the trend chart
+    PLANTS.forEach(p=> trendVisible[p.code] = true);
+    buildTrendFilter();
+    document.getElementById('emptyState').style.display = 'none';
+    document.getElementById('dash').style.display = 'block';
+    renderAll();
+    // Give the table a moment to paint, then land it on today's row.
+    setTimeout(scrollTableToToday, 50);
+  }catch(err){
+    console.error(err);
+    setFileState(false, 'ອ່ານຟາຍບໍ່ໄດ້ / Could not read file — check it has an "MTN" sheet');
+  }
+}
 
 function handleFile(e){
   const f = e.target.files[0];
   if(!f) return;
   const reader = new FileReader();
-  reader.onload = function(evt){
-    try{
-      const data = new Uint8Array(evt.target.result);
-      const wb = XLSX.read(data, {type:'array', cellDates:true});
-      const sheetName = wb.SheetNames.find(n => n.trim().toUpperCase() === 'MTN') || wb.SheetNames[0];
-      const ws = wb.Sheets[sheetName];
-      // Wide layout: row0-2 = headers/groups, data starts row index 3 (0-based) = sheet row 4
-      const arr = XLSX.utils.sheet_to_json(ws, {header:1, range:3, defval:null});
-      ROWS = [];
-      arr.forEach(r=>{
-        if(!r || r[0] == null) return;
-        if(r[0] instanceof Date) r[0].setTime(Math.round(r[0].getTime()/60000)*60000); // round ໄປຫານາທີ່ໃກ້ສຸດ ແກ້ float error ຂອງ Excel serial date
-        const dateStr = toDateStr(r[0]);
-        const weekNum = num(r[1]);
-        PLANTS.forEach(p=>{
-          const rec = {date:dateStr, week:weekNum, code:p.code};
-          for(const k of NUM_KEYS) rec[k] = num(r[p.block + OFF[k]]);
-          rec.notes = r[p.block + OFF.notes];
-          ROWS.push(rec);
-        });
-      });
-      if(ROWS.length === 0){
-        setFileState(false, 'ບໍ່ພົບແຖວຂໍ້ມູນທີ່ຖືກຕ້ອງ / No valid rows found');
-        return;
-      }
-      setFileState(true, f.name);
-      buildDateSelect();
-      // default: all plants visible in the trend chart
-      PLANTS.forEach(p=> trendVisible[p.code] = true);
-      buildTrendFilter();
-      document.getElementById('emptyState').style.display = 'none';
-      document.getElementById('dash').style.display = 'block';
-      renderAll();
-      // Give the table a moment to paint, then land it on today's row.
-      setTimeout(scrollTableToToday, 50);
-    }catch(err){
-      console.error(err);
-      setFileState(false, 'ອ່ານຟາຍບໍ່ໄດ້ / Could not read file — check it has an "MTN" sheet');
-    }
-  };
+  reader.onload = evt => processWorkbookArrayBuffer(evt.target.result, f.name);
+  reader.onerror = () => setFileState(false, 'ອ່ານຟາຍບໍ່ໄດ້ / Could not read file');
   reader.readAsArrayBuffer(f);
 }
 
+// ດຶງໄຟລ໌ Excel ຈາກລິ້ງໂດຍກົງ (fetch). ຖ້າ CORS ບໍ່ອະນຸຍາດ ຫຼື link ບໍ່ແມ່ນ direct-download
+// (ເປັນ Excel Online viewer page), ຈະຂຶ້ນຄຳເຕືອນ ແລະ ໃຫ້ຜູ້ໃຊ້ອັບໂຫລດຟາຍດ້ວຍມືແທນ.
+async function loadFromUrl(url, isManualRefresh){
+  if(!url) return;
+  setFileState(null, isManualRefresh ? 'ກຳລັງໂຫລດຄືນ… / Refreshing…' : 'ກຳລັງດຶງຂໍ້ມູນ… / Fetching latest data…');
+  try{
+    const res = await fetch(url, {cache:'no-store'});
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+    const buf = await res.arrayBuffer();
+    processWorkbookArrayBuffer(buf, 'Auto-fetched · ' + new Date().toLocaleString('en-GB'));
+  }catch(err){
+    console.error(err);
+    setFileState(false, 'ດຶງຂໍ້ມູນຈາກລິ້ງບໍ່ສຳເລັດ (ອາດຕິດ CORS/ສິດເຂົ້າເຖິງ) — ລອງ "ອັບໂຫລດຟາຍ" ແທນ / Auto-fetch failed — use manual upload');
+  }
+}
+
+// ດຶງອັດຕະໂນມັດຕອນເປີດໜ້າ ຖ້າມີການຕັ້ງຄ່າ EXCEL_URL ໄວ້
+if(EXCEL_URL) loadFromUrl(EXCEL_URL, false);
+
 function setFileState(ok, label){
   const el = document.getElementById('fileState');
-  el.innerHTML = `<span class="status-dot" style="background:${ok?'#4ADE80':'#F87171'}"></span>${label}`;
+  const color = ok===null ? '#F5C542' : (ok ? '#4ADE80' : '#F87171');
+  el.innerHTML = `<span class="status-dot" style="background:${color}"></span>${label}`;
 }
 
 function pad2(n){ return String(n).padStart(2,'0'); }
