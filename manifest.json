@@ -1,8 +1,8 @@
 {
-  "name": "CSE Hydropower Data",
-  "short_name": "CSE Hydropower",
-  "description": "ຂໍ້ມູນພະລັງງານໄຟຟ້າທັງ 6 ເຂື່ອນ ຂອງບໍລິສັດຈະເລີນເຊກອງ ພະລັງງານ",
-  "start_url": "./hydropower_dashboard_web.html",
+  "name": "CSE Maintenance 6 Power Plants",
+  "short_name": "CSE Maintenance",
+  "description": "ຕິດຕາມ ບຳລຸງຮັກສາ ແລະ ສ້ອມແປງ",
+  "start_url": "./CSE_Maintenance_Dashboard_Web.html",
   "scope": "./",
   "display": "standalone",
   "orientation": "any",
