@@ -260,13 +260,13 @@
       </div>
     </section>
 
-    <section>
-      <div class="panel">
-        <h3>ແນວໂນ້ມ PM YTD % ຕາມວັນທີ </h3>
-        <div class="plant-filter" id="trendFilter"></div>
-        <div class="chart-box"><canvas id="trendChart"></canvas></div>
-      </div>
-    </section>
+//    <section>
+//      <div class="panel">
+//        <h3>ແນວໂນ້ມ PM YTD % ຕາມວັນທີ </h3>
+//        <div class="plant-filter" id="trendFilter"></div>
+//        <div class="chart-box"><canvas id="trendChart"></canvas></div>
+//      </div>
+//    </section>
 
     <section>
       <p class="eyebrow">ບັນທຶກທັງໝົດ · Full Log</p>
@@ -636,26 +636,26 @@ function renderCmChart(cm, selDate){
   });
 }
 
-function renderTrendChart(){
-  destroy('trend');
-  const dates = [...new Set(ROWS.map(r=>r.date))].sort();
-  const datasets = PLANTS.map(p=>{
-    const byDate = {}; ROWS.filter(r=>r.code===p.code).forEach(r=>byDate[r.date]=r.pm_ytd_pct*100);
-    return {
-      label:`${p.code} — ${p.name}`,
-      data: dates.map(d=> byDate[d] !== undefined ? byDate[d] : null),
-      borderColor:PLANT_HEX[p.code], backgroundColor:PLANT_HEX[p.code],
-      spanGaps:true, tension:.3, pointRadius:0, borderWidth:2,
-      hidden: !trendVisible[p.code],
-    };
-  });
-  const ctx = document.getElementById('trendChart').getContext('2d');
-  charts.trend = new Chart(ctx, {
-    type:'line',
-    data:{ labels:dates, datasets },
-    options: {...chartOpts({suffix:'%', maxY:100}), plugins:{legend:{display:false}}}
-  });
-}
+//function renderTrendChart(){
+//  destroy('trend');
+//  const dates = [...new Set(ROWS.map(r=>r.date))].sort();
+//  const datasets = PLANTS.map(p=>{
+//    const byDate = {}; ROWS.filter(r=>r.code===p.code).forEach(r=>byDate[r.date]=r.pm_ytd_pct*100);
+//    return {
+//      label:`${p.code} — ${p.name}`,
+//      data: dates.map(d=> byDate[d] !== undefined ? byDate[d] : null),
+//      borderColor:PLANT_HEX[p.code], backgroundColor:PLANT_HEX[p.code],
+//      spanGaps:true, tension:.3, pointRadius:0, borderWidth:2,
+//      hidden: !trendVisible[p.code],
+//    };
+//  });
+//  const ctx = document.getElementById('trendChart').getContext('2d');
+//  charts.trend = new Chart(ctx, {
+//    type:'line',
+//    data:{ labels:dates, datasets },
+//    options: {...chartOpts({suffix:'%', maxY:100}), plugins:{legend:{display:false}}}
+//  });
+//}
 
 function chartOpts({suffix='', maxY=null}={}){
   return {
